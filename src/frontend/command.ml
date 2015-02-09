@@ -417,20 +417,17 @@ let dispatch (state : state) =
     { entries = List.concat_map ~f:process_lident lidents;
       context = `Unknown }
 
-  | (Document (patho, opt_pos) : a request) ->
+  | (Document (patho, pos) : a request) ->
     let comments = Buffer.comments state.buffer in
     let env, local_defs =
       with_typer state @@ fun typer ->
-      match opt_pos with
-      | None     -> Typer.env typer, []
-      | Some pos ->
-        let node, _ = Completion.node_at typer pos in
-        node.BrowseT.t_env, Typer.contents typer
+      let node, _ = Completion.node_at typer pos in
+      node.BrowseT.t_env, Typer.contents typer
     in
     let path =
-      match patho, opt_pos with
-      | None, None -> failwith "invalid arguments"
-      | None, Some pos ->
+      match patho with
+      | Some p -> p
+      | None ->
         let lexer = Buffer.lexer state.buffer in
         let lexer =
           History.seek_backward (fun (_,item) ->
@@ -439,29 +436,22 @@ let dispatch (state : state) =
         let path = Lexer.reconstruct_identifier ~for_locate:true lexer in
         let path = Lexer.identifier_suffix path in
         let path = List.map ~f:(fun {Location. txt} -> txt) path in
-        let path = String.concat ~sep:"." path in
-        path
-      | Some path, _ -> path
+        String.concat ~sep:"." path
     in
-    let is_implementation = Buffer.is_implementation state.buffer in
     let source  = Buffer.unit_name state.buffer in
     let project = Buffer.project state.buffer in
-    Track_definition.get_doc ~project ~env ~local_defs ~is_implementation
-      ~comments ?pos:opt_pos source path
+    Track_definition.get_doc ~project ~env ~local_defs ~comments ~pos source path
 
-  | (Locate (patho, ml_or_mli, opt_pos) : a request) ->
+  | (Locate (patho, ml_or_mli, pos) : a request) ->
     let env, local_defs =
       with_typer state @@ fun typer ->
-      match opt_pos with
-      | None     -> Typer.env typer, []
-      | Some pos ->
-        let node, _ = Completion.node_at typer pos in
-        node.BrowseT.t_env, Typer.contents typer
+      let node, _ = Completion.node_at typer pos in
+      node.BrowseT.t_env, Typer.contents typer
     in
     let path =
-      match patho, opt_pos with
-      | None, None -> failwith "invalid arguments"
-      | None, Some pos ->
+      match patho with
+      | Some p -> p
+      | None ->
         let lexer = Buffer.lexer state.buffer in
         let lexer =
           History.seek_backward (fun (_,item) ->
@@ -470,19 +460,11 @@ let dispatch (state : state) =
         let path = Lexer.reconstruct_identifier ~for_locate:true lexer in
         let path = Lexer.identifier_suffix path in
         let path = List.map ~f:(fun {Location. txt} -> txt) path in
-        let path = String.concat ~sep:"." path in
-        path
-      | Some path, _ -> path
+        String.concat ~sep:"." path
     in
-    let is_implementation = Buffer.is_implementation state.buffer in
     let project = Buffer.project state.buffer in
     begin match
-      Track_definition.from_string ~project ~env ~local_defs ~is_implementation
-        ?pos:opt_pos ml_or_mli path
-(*
-      Track_definition.get_doc ~project ~env ~local_defs ~is_implementation
-        ?pos:opt_pos path
-*)
+      Track_definition.from_string ~project ~env ~local_defs ~pos ml_or_mli path
     with
     | `Found (file, pos) ->
       Logger.info (Track_definition.section)
